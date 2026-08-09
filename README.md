@@ -3,7 +3,7 @@
 
 ## Overview
 
-This project analyses GPS collar and accelerometer data from Highland cattle monitored on Gloucestershire Wildlife Trust reserves between 2021 and 2024. The workflow classifies cattle behaviour using Hidden Markov Models and produces habitat preference maps to support conservation grazing management.
+This project analyses GPS collar and accelerometer data from Highland cattle monitored on Gloucestershire Wildlife Trust reserves between 2021 and 2024. The workflow evaluates seasonal variation in accelerometer activity time-series, classifies cattle behaviour using Hidden Markov Models and produces habitat preference maps to support conservation grazing management.
 
 ## Objectives
 
@@ -14,14 +14,15 @@ This project analyses GPS collar and accelerometer data from Highland cattle mon
 
 ## Methods
 
-- Python (pandas, NumPy, GeoPandas, Folium)
-- R (momentuHMM, sf, dplyer)
-- Survey123 Behavioural Monitoring
-- Hidden Markov Model
-- GIS spatial analysis
-- Confusion matrix validation
-- Interactive mapping with Folium
-- Quarto reproducible reporting
+This project combines:
+- Data cleaning and preprocessing in Python
+- Analysis of seasonal variation in accelerometer activity timeseries
+- Hidden Markov Model behavioural classification
+- Validation using independent behavioural observations
+- Seasonal habitat preference analysis
+- GIS mapping and interactive visualisation
+- Quarto reproducible reporting 
+
 
 ## Results
 
@@ -34,6 +35,17 @@ This project analyses GPS collar and accelerometer data from Highland cattle mon
 
 <img width="585" height="730" alt="GrazingPreference" src="https://github.com/user-attachments/assets/e3ff175a-2c58-4257-a268-d19eb997c0b9" />
 
+## Skills Demonstrated
+
+- Python (pandas, NumPy, GeoPandas, Folium)
+- R (momentuHMM, sf, dplyer)
+- Survey123 Behavioural Monitoring
+- Hidden Markov Model 
+- GIS spatial analysis
+- Confusion matrix validation
+- Interactive mapping with Folium
+- Quarto reproducible reporting
+
 ## Future Work
 
 - Effect of behavioural state use on habitat specific vegetation indicators
@@ -42,4 +54,5 @@ This project analyses GPS collar and accelerometer data from Highland cattle mon
 ## Report
 
 Access report here:
-[NoFenceProject.html](https://github.com/user-attachments/files/30875489/NoFenceProject.html)
+[NoFenceProject.html](https://github.com/user-attachments/files/30875601/NoFenceProject.html)
+
