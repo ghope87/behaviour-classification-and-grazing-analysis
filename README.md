@@ -1,4 +1,4 @@
-
+[Overall_ActiveMap.html](https://github.com/user-attachments/files/30875706/Overall_ActiveMap.html)
 # Behavioural Classification and Grazing Analysis
 
 ## Overview
@@ -11,6 +11,11 @@ This project analyses GPS collar and accelerometer data from Highland cattle mon
 - Classify active and resting behavioural states using Hidden Markov Models.
 - Map seasonal and annual spatial distribution of behavioural states.
 - Assess habitat use across the reserve.
+
+## Workflow
+
+<img width="1000" height="600" alt="Overall Activity Profile" src="https://github.com/user-attachments/assets/55c8f14e-db84-4780-b73a-f62315aa3a5e" />
+
 
 ## Methods
 
@@ -25,6 +30,10 @@ This project combines:
 
 
 ## Results
+
+- Seasonal timeseries graph comparison
+
+  <img width="1000" height="600" alt="Overall Activity Profile" src="https://github.com/user-attachments/assets/7403904a-267b-4492-8961-c78cf9fe0575" />
 
 - Hidden Markov Model - confusion matrix
 - Behavioural classification accuracy: 90.4%
