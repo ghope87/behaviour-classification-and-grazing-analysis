@@ -13,7 +13,8 @@ This project analyses GPS collar and accelerometer data from Highland cattle mon
 
 ## Workflow
 
-<img width="1000" height="600" alt="Overall Activity Profile" src="https://github.com/user-attachments/assets/55c8f14e-db84-4780-b73a-f62315aa3a5e" />
+<img width="1202" height="654" alt="NoFenceWorkflow" src="https://github.com/user-attachments/assets/37ea2344-69dc-4967-86e1-7778e894081e" />
+
 
 
 ## Methods
