@@ -1,4 +1,3 @@
-[Overall_ActiveMap.html](https://github.com/user-attachments/files/30875706/Overall_ActiveMap.html)
 # Behavioural Classification and Grazing Analysis
 
 ## Overview
