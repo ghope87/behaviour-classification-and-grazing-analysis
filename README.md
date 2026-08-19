@@ -47,7 +47,7 @@ This project combines:
 ## Skills Demonstrated
 
 - Python (pandas, NumPy, GeoPandas, Folium)
-- R (momentuHMM, sf, dplyer)
+- R (momentuHMM, sf, dplyr)
 - Survey123 Behavioural Monitoring
 - Hidden Markov Model 
 - GIS spatial analysis
