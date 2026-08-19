@@ -65,3 +65,6 @@ This project combines:
 Access report here:
 [NoFenceProject.html](https://github.com/user-attachments/files/30875601/NoFenceProject.html)
 
+## Note
+
+Source data and implementation code are witheld due to project data restrictions; this repository contains a redacted porfolio summary of the analystical workflow and outputs.
