@@ -1,0 +1,565 @@
+---
+title: "Using NoFence Collar Data to Investigate Accelerometer Activity, and Reserve Site Habitat Selection and Use in Highland Cattle"
+author: "Graham Hope"
+format: html
+editor: visual
+---
+
+## Executive Summary
+
+This report evaluates NoFence GPS and accelerometer collar data collected between June 2021 and February 2024 to investigate seasonal cattle behaviour and spatial grazing patterns. Seasonal activity levels were compared to identify differences in grazing intensity throughout the year. A Hidden Markov Model was applied to classify active and resting behavioural states from collar sensor data. Behavioural states were mapped to examine seasonal and annual patterns of site use. The analyses identified significant seasonal variation in activity, and stable long-term spatial grazing patterns , providing evidence to inform grazing management and further monitoring.
+
+## Background
+
+Conservation grazing requires an understanding of how cattle behaviour, habitat use and grazing pressure vary through time to support evidence-based management decisions. Although NoFence collars provide continuous GPS location and accelerometer data, these datasets are often used primarily for livestock tracking rather than ecological analysis. By combining collar data with behavioural observations and vegetation monitoring, grazing patterns can be quantified and linked to habitat condition.
+
+This project uses NoFence collar data to investigate seasonal variation cattle activity, classify behavioural states from accelerometer data, map spatial patterns of between cattle presence and habitat use. Together, these analyses demonstrate how geospatial and statistical methods can support adaptive conservation grazing management and long-term ecological monitoring.
+
+## Project Objectives
+
+- Quantify seasonal variation in cattle activity.
+
+- Classify active and resting behavioural states using Hidden Markov Models.
+
+- Map seasonal and annual spatial distribution of behavioural states.
+
+- Assess habitat use across the reserve.
+
+## Methods and Results
+
+### Software
+
+All analyses were conducted using Python 3.12 and R 4.5.2. Data manipulation was performed using pandas and NumPy; spatial analyses used GeoPandas; statistical analyses were conducted using SciPy and statsmodels; behavioural modelling used momentuHMM in R; and interactive maps were produced using Folium. The report was produced using Quarto.
+
+### Workflow
+
+```{r}
+#| echo: false
+#| eval: true
+#| out-width: 120%
+
+knitr::include_graphics('NoFenceWorkflow.jpg')
+```
+
+### Data Cleaning and Preprocessing
+
+NoFence collar data derived from 14 highland cattle monitored between July 2021 to February 2024 were imported into Python. Invalid timestamps were removed, primary analysis variables were retained and observations were assigned to seasonal subsets based on calender month: Winter (December - February); Spring (March - May); Summer (June - August); and Autumn (September - November).
+
+```{python}
+#| echo: true
+#| eval: false
+
+df=pd.read_csv('NoFence_collars.csv')
+
+# Remove na from timestamps
+df['Time']=pd.to_datetime(df['Time'], errors='coerce')
+df=df.dropna(subset=['Time'])
+
+df['month']=df['Time'].dt.month
+
+# Select analysis variables
+activity_data=df[['Serial', 'Time','Longitude','Latitude','Activity']].dropna(subset='Activity')
+
+# Select seasons
+
+WinterData=df[df['month'].isin([1,2,12])]
+SpringData=df[df['month'].isin([3,4,5])]
+SummerData=df[df['month'].isin([6,7,8])]
+AutumnData=df[df['month'].isin([9,10,11])]
+
+```
+
+### Seasonal Activity Time-series and Analysis
+
+The seasonal subsets were converted to accelerometer activity time-series, which were averaged across all cattle and aggregated to produce an activity profile.
+
+```{python}
+#| echo: true
+#| eval: false
+
+def MakeTimeSeries(data, variable):
+    df_series=pd.DataFrame({'Cow': data['Cow'],
+                'Time': data['Time'],
+                variable: data[variable]
+                })
+
+    # Group series into activity recorded to the nearest half hour of the day
+    df_series['time30']=pd.to_datetime(df_series['Time']).dt.round('30min')
+    
+    df_series['time30']=df_series['time30'].dt.time
+    df_series=(df_series
+           .groupby(['time30','Cow'])[variable]
+           .median()
+           .reset_index()
+          )
+    df_series['hour']=df_series['time30'].apply(lambda t: t.hour +t.minute/60)
+    
+    cows=df_series['Cow'].unique()
+
+    
+    median_series=(df_series
+             .groupby('hour')[variable]
+             .agg(median='median',
+                 q1=lambda x: x.quantile(0.25),
+                  q3=lambda x: x.quantile(0.75)
+                 )
+             .reset_index()
+            )
+
+    return median_series
+
+```
+
+Figure 1 displays the seasonal comparison of median daily activity. The figure suggests substantially greater activity during Spring compared to all other seasons.
+
+```{r}
+#| echo: false
+#| eval: true
+#| out-width: 120%
+
+knitr::include_graphics('Overall Activity Profile.png')
+
+```
+
+*Figure 1: Daily activity profiles for spring (green), summer (yellow), autumn (red) and winter (blue).*
+
+Table 1 displays a clear seasonal ordering in activity levels with spring displaying the highest activity and winter the lowest. Spring activity is more than twice the activity observed for winter, twice that observed in Autumn, and approximately 70% greater than summer activity.
+
+| **Season** | Median | Difference from Winter | \% Difference from Winter |
+|------------|--------|------------------------|---------------------------|
+| Winter     | 323    | \-                     | \-                        |
+| Spring     | 786    | 462.75                 | 143%                      |
+| Summer     | 466    | 143.25                 | 44.3%                     |
+| Autumn     | 388    | 77.5                   | 20.4%                     |
+
+*Table 1: Seasonal median average activity, difference and percentage difference compared to winter.*
+
+Multiple comparisons (Mann-Whitney U for non-parametric data) demonstrated that all seasonal comparisons were significant (p\<0.001), suggesting that season is an important factor influencing cattle activity patterns.
+
+### Behavioural Monitoring Survey
+
+A survey123 form was designed to collect behavioural labels that correspond with timestamped accelerometer data. Since signals delivering data from the collars were variable, forms were completed every 15 minutes to minimize collar alignment errors. The time, behaviour and time spent feeding were recorded over two separate 5 day periods in March and May from 7 animals across 3 reserves.
+
+### Temporal Alignment of Behavioural Labels with Accelerometer Data
+
+Survey123 behaviour observations were aggregated into two overlapping 30-minute time blocks (quarter-past to quarter-to the hour, and half-past to the hour) to maximise temporal alignment with the NoFence collar observations.
+
+```{python}
+#| echo: true
+#| eval: false
+
+def TimeBlocks(data,cowList):
+  
+  allCowData=[]
+  for cow in cowList:
+    cowData=data[data['Cow']==cow]
+    cowData['Date and time']=pd.to_datetime(cowData['Date and time'], format='mixed')
+    cowData = cowData.sort_values('Date and time')
+    
+    blocka=cowData.copy()
+    blocka['block30']=(
+      blocka['Date and time']
+      .sub(pd.Timedelta(seconds=1))
+      .dt.floor('30min')
+      .add(pd.Timedelta(minutes=30)))
+    blocka = (
+      blocka
+      .groupby(['Cow','block30'], as_index=False)
+      .agg(
+        Behaviour30=('Behaviour', lambda x:','.join(x.dropna().unique())),
+        grazing_time30=('Grazing time (minutes)', 'sum')))
+    
+    
+    blockb=cowData.copy()
+    blockb['block15']=(
+      blockb['Date and time']
+      .sub(pd.Timedelta(minutes=15))
+      .dt.ceil('30min')
+      .add(pd.Timedelta(minutes=15)))
+    blockb = (
+      blockb
+      .groupby(['Cow','block15'], as_index=False)
+      .agg(
+        Behaviour15=('Behaviour', lambda x:','.join(x.dropna().unique())),
+        grazing_time15=('Grazing time (minutes)', 'sum')))
+    
+    blocka['row_no']=blocka.groupby('Cow').cumcount()
+    blockb['row_no']=blockb.groupby('Cow').cumcount()
+    
+    cowDataBlocks=blocka.merge(blockb,on=['Cow','row_no'], how='inner')
+    allCowData.append(cowDataBlocks)
+    
+  return pd.concat(allCowData, ignore_index=True)
+
+```
+
+The method used to merge the datasets was validated using root mean squared error (RMSE), mean absolute difference (MAD), and maximum error. These metrics were also expressed as a percentage of the 30-minute sampling interval. Low RMSE and MAD values relative to the 30-minute sampling interval indicated good temporal alignment between the behavioural observations and collar data. The results are displayed in Table 2.
+
+| Metric    | Value | Percentage of interval |
+|-----------|-------|------------------------|
+| RMSE      | 3.54  | 11.8%                  |
+| MAD       | 2.60  | 8.7%                   |
+| Max error | 6.18  | 20.6%                  |
+
+*Table 2: Validation metrics for temporal alignment between bahavioural observations and NoFence collar data.*
+
+The relatively low RMSE and MAD values indicate that the behavioural labels were accurately aligned with the NoFence collar data. The maximum error was approximately 6 minutes (20.6% of the 30-minute interval), suggesting that even the largest temporal mismatch was unlikely to alter the assigned behavioural label.
+
+### Behavioural Classification and Model Validation
+
+The data were prepared for hidden Markov model (HMM) analysis following the workflow described in the momentuHMM documentation version 1.5.8 (McClintock & Michelot, 2018). Variables were renamed to the required format, individual cattle identifiers were converted to factors, observations were ordered chronologically, and the data were converted to the format required by prepData(). Accelerometer activity values were log-transformed (log1p) to improve normality before model fitting.
+
+```{r}
+#| echo: true
+#| eval: false
+
+# Prepare data for compiling into prepData
+dat<-data %>%
+  rename(ID = Cow,
+         x = Longitude,
+         y = Latitude,
+         activity = Activity) %>%
+  mutate(ID = as.factor(ID),
+         time = ymd_hms(Time_of_day,tz = 'UTC'))%>%
+  select(ID, x, y, time, activity)%>%
+  arrange(ID, time)
+
+
+# Apply prep data
+
+dat_hmm<- momentuHMM::prepData(dat,
+                               type='LL')
+
+# log_10 of activity to normalize
+dat_hmm$log_activity<-log1p(dat_hmm$activity)
+
+# Define distributions
+dist<-list(log_activity='norm')
+
+# Define parameters
+Par0<-list(
+  log_activity=c(4, 7,
+                 1.6, 1.6)
+)
+
+# Fit HMM model
+
+m<-fitHMM(data=dat_hmm,
+          nbStates=2,
+          dist=dist,
+          Par0 = Par0,
+          stateNames=c('Rest', 'Graze'))
+
+```
+
+Following model fitting, the estimated model parameters were extracted and applied to an independent test data set. The test dataset, previously temporally aligned with the behavioural labels, was prepared for the hidden Markov model prediction following the momentuHMM documentation, version 1.5.8 (McClintock & Michelot, 2018). Behavioural states were predicted using the parameters estimated for the trained hidden Markov model. Predicted states were then compared with observed behavioural labels using a confusion matrix (Table 3).
+
+```{r}
+#| echo: true
+#| eval: false
+
+# Extract fitted parameters from trained HMM
+pars <- getPar(m)
+
+# Predict behavioural states for the independent test dataset
+test_model <- fitHMM(data = test_hmm,
+                     nbStates=2,
+                     dist=m$conditions$dist,
+                     Par0=pars$Par,
+                     beta0=pars$beta,
+                     delta0=pars$delta,
+                     formula = ~1,
+                     stateNames = m$stateNames,
+                     fit = FALSE)
+
+# Decode the most likely behavioural state sequence
+test_hmm$test_states<-viterbi(test_model)
+
+# Compare predicted and observed behavioural states
+conf_dat <- test_hmm %>%
+  filter(!is.na(test_states),
+         !is.na(recode_graze))
+
+table(Observed = test_hmm$recode_graze,
+      Predicted =test_hmm$test_states)
+```
+
+|                      | Observed Rest | Observed Active |
+|----------------------|---------------|-----------------|
+| **Predicted Rest**   | 87            | 10              |
+| **Predicted Active** | 8             | 83              |
+
+|  |
+|------------------------------------------------------------------------|
+| *Table 3: Confusion Matrix displaying observed and Hidden Markov Model predicted states* |
+
+Model validation results indicated strong classification performance, with an overall accuracy of 90.4%, an active-state precision of 91.2% and an active-state recall of 89.2%.
+
+A hidden Markov model was applied separately to each season subset. Predicted behavioural states were subsequently mapped for each season and for the complete 2021 - 2024 study period.
+
+### Spatial Analysis and Mapping
+
+Cumulative use was defined as the total number of hours cattle spent in a given behavioural state within each grid square. Cumulative use was calculated and mapped separately for active and resting states, both seasonally and across the full 2021-2024 study period. Figure 2 shows cumulative active-state use at a Gloucestershire Wildlife Trust reserve across the complete study period.
+
+To protect site confidentiality, raw GPS locations and individual movement tracks are not presented. Spatial patterns are summarised at an aggregated grid-cell and habitat-level.
+
+```{python}
+#| echo: true
+#| eval: false
+
+def MakeMap(map_grid, behaviour):
+
+    # Replace missing summary values    
+    map_grid['mean_activity']=map_grid['mean_activity'].fillna(0)
+    map_grid['median_cows']=map_grid['median_cows'].fillna(0)
+    
+    # Convert to BNG
+    map_grid=map_grid.to_crs('EPSG: 27700')
+    
+    # Coordinates for map centre
+    centre_x = map_grid.geometry.centroid.x.mean()
+    centre_y = map_grid.geometry.centroid.y.mean()
+    
+    # Convert to WGS84 and calculate map centre
+    map_grid=map_grid.to_crs('EPSG:4326')
+
+    centre = gpd.GeoSeries([Point(centre_x, centre_y)],
+                       crs = 'EPSG: 27700').to_crs('EPSG: 4326')
+    
+    lat=centre.y.iloc[0]
+    long=centre.x.iloc[0]
+
+    map_grid['lat']=lat
+    map_grid['long']=long
+    
+    # Initialise folium map
+    m = folium.Map(location=[lat,long],
+                   zoom_start=15)
+    
+    if behaviour=='Graze':
+        map_grid['cattle_graze_hours']=(map_grid['count_graze']/2)
+        
+        # Classify grazing intensity using Jenks
+        values=map_grid['cattle_graze_hours']
+        jenks=mapclassify.NaturalBreaks(values,k=5)
+        bins=[values.min()]+list(jenks.bins)
+        
+        
+        # Add satellite basemap
+        folium.TileLayer(
+            tiles = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+            attr='Esri',
+            name='Satellite'
+        ).add_to(m)
+        
+        # Create colour scale and legend
+        colormap = cm.StepColormap(
+            ['darkblue','lightblue','yellow','orange','darkred'],
+            index=bins,
+            vmin=min(bins),
+            vmax=max(bins)
+        )
+
+        colormap.caption='Active Hours'
+        colormap.text_color='white'
+        colormap.add_to(m)
+        
+        # Add grazing intensity layer and interactive controls
+        folium.GeoJson(map_grid,
+                       name='Reserve grid',
+                       style_function=lambda feature: {
+                           'fillColor':colormap(feature['properties']['cattle_graze_hours']),
+                       #style_function = lambda x: {
+                        #   'fillColor': 'transparent',
+                           'color':'black',
+                           'weight':0.5,
+                           'fillOpacity':0.5
+                       },
+                       tooltip=folium.GeoJsonTooltip(
+                           fields=['gridnumber', 'mean_activity','median_cows', 'night_obs','day_obs'],
+                           aliases=['Gridnumber:', 'Mean activity:', 'No. cows:', 'Night hours:', 'Day_hours:'],
+                           localize=True,
+                           sticky=True
+                       )
+                      ).add_to(m)
+
+        folium.LayerControl().add_to(m)
+
+    elif behaviour=='Rest':
+        map_grid['cattle_rest_hours']=(map_grid['count_rest']/2)
+        
+        # Classify grazing intensity using Jenks
+        values=map_grid['cattle_rest_hours']
+        jenks=mapclassify.NaturalBreaks(values,k=5)
+        bins=[values.min()]+list(jenks.bins)
+        
+        # Add satellite basemap
+        folium.TileLayer(
+            tiles = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+            attr='Esri',
+            name='Satellite'
+        ).add_to(m)
+        
+        # Create colour scale and legend
+        colormap = cm.StepColormap(
+            ['darkblue','lightblue','yellow','orange','darkred'],
+            index=bins,
+            vmin=min(bins),
+            vmax=max(bins)
+        )
+
+        colormap.caption='Active hours'
+        colormap.text_color='white'
+        colormap.add_to(m)
+        
+        # Add grazing intensity layer and interactive controls
+        folium.GeoJson(map_grid,
+                       name='Reserve grid',
+                       style_function=lambda feature: {
+                           'fillColor':colormap(feature['properties']['cattle_rest_hours']),
+                           #'fillColor': 'transparent',
+                           'color':'black',
+                           'weight':0.5,
+                           'fillOpacity':0.5
+                       },
+                       tooltip=folium.GeoJsonTooltip(
+                           fields=['gridnumber', 'mean_activity','median_cows','cattle_rest_hours', 'night_obs', 'day_obs'],
+                           aliases=['Gridnumber:', 'Mean activity:', 'No. cows:', 'Rest hours:', 'Night hours:', 'Day hours:'],
+                           localize=True,
+                           sticky=True
+                       )
+                      ).add_to(m)
+
+        folium.LayerControl().add_to(m)
+
+    return m
+
+```
+
+```{=html}
+
+<iframe
+src='Overall_ActiveMap.html'
+width='100%'
+height='650'
+style='border:none;'>
+  </iframe>
+  
+```
+
+*Figure 2: Interactive active state behaviour map displaying cumulative use for the complete 2021 - 2024 study period.*
+
+The overall summary map displays the distribution of the active behavioural state from June 2021 to May 2024. Areas of moderate to high use are distributed predominantly throughout the central region and along site boundaries, while lower cumulative use occurs towards the margins of the accessible area.
+
+### Habitat Use and Selection
+
+To assess habitat preference cumulative cattle use was summarised within the mapped habitat boundaries at the study site. Figure 3 shows the spatial distribution of cumulative use across the main habitat types, while Table 3 presents the proportion of total use occurring within each habitat for the active and resting behavioural states.
+
+```{python}
+#| echo: true
+#| eval: false
+
+# Prepare data for mapping and analysis
+def SummariseHabUse(data, site_habitats):
+    # Recode states as rest = 0 and active = 1
+    data['recode_states']=data['states'].apply(lambda x: 1 if x==2 else 0)
+   
+    # convert to geodataframe with crs same as habitat layer
+    data_gdf=gpd.GeoDataFrame(data, geometry=gpd.points_from_xy(data['x'], data['y']) ,crs=site_habitats.crs)
+
+    # merge with habitat layer and count number of hours spent in each habitat
+    points_in_hab=gpd.sjoin(
+    data_gdf,
+    site_habitats,
+    how='left',
+    predicate='within')
+    
+    # Summarise by usage and accelerometer activity
+    habitat_summary=(points_in_hab
+                 .groupby('habitat')
+                 .agg(
+                     all_count=('recode_states', 'size'),
+                     active_count=('recode_states','sum'),
+                     mean_activity=('activity', 'mean'))
+                 .reset_index())
+                 
+    
+    # Rest Usage
+    habitat_summary['rest_count']=habitat_summary['all_count']-habitat_summary['active_count']
+    
+    # Sum area by habitat type
+    site_habitats['area_m2']=site_habitats.geometry.area
+
+    total_area=(site_habitats
+            .groupby('habitat')
+            .agg(
+                area=('area_m2','sum'))
+            .reset_index())
+
+    habitat_summary=habitat_summary.merge(total_area, on='habitat', how='inner')
+
+    # Calculate habitat use proportions
+    habitat_summary['use_prop']=(habitat_summary['all_count']/np.sum(habitat_summary['all_count']))
+    habitat_summary['area_prop']=habitat_summary['area']/np.sum(habitat_summary['area'])
+    habitat_summary['selection_ratio']=habitat_summary['use_prop']/habitat_summary['area_prop']
+
+    # Make data to be mapped
+    map_data=site_habitats[['habitat', 'geometry']].merge(habitat_summary, on='habitat', how='right')
+
+    return map_data
+```
+
+```{r}
+#| echo: false
+#| eval: true
+#| out-width: 125%
+
+knitr::include_graphics('GrazingPreference.jpg')
+```
+
+| Habitat   | Percentage Active | Percentage Rest | Percentage Area |
+|-----------|-------------------|-----------------|-----------------|
+| Wetland   | 3.12%             | 1.58%           | 1.00%           |
+| Grassland | 33.24%            | 36.01%          | 26.67%          |
+| Heathland | 42.53%            | 36.73%          | 35.07%          |
+| Woodland  | 21.04%            | 25.65%          | 37.20%          |
+
+*Table 4: Cattle Habitat Preference - Behaviour Dependent Percentage Usage*
+
+Descriptive patterns of habitat use were broadly similar between active and resting behavioural states. Heathland showed the greatest cumulative active-state, while grassland and woodland accounted for similarly high proportions of rest-state use.
+
+Habitat use did not correspond directly with habitat availability. Woodland comprised the largest area occupy 37% of the mapped habitat, but accounted for only 21.0% of active-state use and 25.7% of rest-state use. In contrast, heathland and grassland received a greater proportion of cattle use than their proportional area suggesting preferential use of these habitats.
+
+## Interpretation and Key findings
+
+### Seasonal Variation in Activity
+
+The observed seasonal variation in activity profiles is likely associated with variation in day length and temperature. Longer daylight hours may contribute to extended periods of daytime activity, whereas higher temperatures may encourage longer midday resting periods.
+
+Substantially higher spring activity relative to other seasons may be related to seasonal variation in the palatability of vegetation. **Considering that spring often coincides with periods of habitat and species sensitivity, it may represent a priority period for minimizing grazing impacts**.
+
+### Hidden Markov Model Performance
+
+The results of the two-state Hidden Markov Model indicate that the model provides a reliable basis for classifying behavioural states across the wider collar dataset.
+
+The validated HMM therefore enabled behavioural state predictions to be extended across periods where direct field observations were unavailable, allowing seasonal and long-term patterns of cattle activity to be summarised spatially.
+
+### Overall 2021 - 2024 Habitat Preference
+
+Habitat use was spatially uneven and did not reflect habitat availability. Heathland and grassland received disproportionately high active-state use, whilst woodland received lower active-state use despite comprising the largest proportion of available habitat. In contrast, grassland received the highest rest-state use compared to the proportion of habitat available. **These findings are indicative of behaviour dependent habitat selection and could help to identify areas at risk of overgrazing, as well as underused habitats.**
+
+## Limitations
+
+On site surveys and discussions with land managers identified several potential limitations, particularly associated with collar functionality and usage.
+
+- Collars can malfunction erroneously recording zero activity even when an animal is active.
+
+- Collars can be swapped between animals, which can reduce predicted behavioural state accuracy.
+
+- A different set of collars were gradually introduced during late 2023 early 2024, which reduced the amount of data available. This is reflected in the fewer active hours observed in the map for the corresponding period June 2023 to May 2024.
+
+- The introduction of new collars also resulted in different activity recording characteristics. Consequently, classification performance estimated from recent validation data may not be directly transferable to earlier datasets.
+
+## Reference
+
+McClintock, B.T., & Michelot, T. 2018. momentuHMM: R package for generalized hidden Markov models of animal movement. Methods in Ecology and Evolution. 9, 1518 - 1930.
