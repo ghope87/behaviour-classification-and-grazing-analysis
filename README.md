@@ -67,4 +67,4 @@ Access report here:
 
 ## Note
 
-Source data and implementation code are witheld due to project data restrictions; this repository contains a redacted porfolio summary of the analystical workflow and outputs.
+Raw data and the complete production workflow are withheld; representative code and aggregated outputs are provided. The report is a redacted technical portfolio project.
